@@ -1,17 +1,22 @@
-import re
-import sys
 from simple_text_api.config.conf import CHARS_TO_DEL
+import re
 
 
 def clean_input(
     input: str,
-) -> str:  # TODO I can assume string want be null - later in pydantic models
-    input = input.strip()
-    # input = re.sub(CHARS_TO_DEL, " ")
-    print(input)
-    return input
+) -> str:
+    output = input.strip().lower()
+
+    for char in CHARS_TO_DEL:
+        output = output.replace(char, "")
+
+    output = re.sub(
+        r"\s+", " ", output
+    )  # Remove multiple spaces, \t ,\n  inside string
+
+    return output
 
 
-s = "Hello! World@"
-
-z = clean_input(s)
+z = "Hell@o.     worl!d"
+print(z)
+print(clean_input(z))
