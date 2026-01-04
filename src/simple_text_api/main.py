@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+from simple_text_api.db.database import Base, engine
+from simple_text_api.schemas.schemas import AnalyzeResponse, CleanRequest, CleanResponse
 from simple_text_api.services.clean_text import clean_input
 from simple_text_api.services.text_analysis import (
     count_sentences,
@@ -6,7 +9,11 @@ from simple_text_api.services.text_analysis import (
     most_frequent_char,
     most_frequent_words,
 )
-from simple_text_api.schemas.schemas import CleanRequest, CleanResponse, AnalyzeResponse
+from simple_text_api.db.database import get_db
+from simple_text_api.db.models import TextAnalysisResult
+import json
+
+Base.metadata.create_all(bind=engine)  # Create table
 
 app = FastAPI()
 
@@ -23,17 +30,30 @@ def clean_text(text: CleanRequest) -> CleanResponse:
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze_text(text: CleanRequest) -> AnalyzeResponse:
+def analyze_text(text: CleanRequest, db: Session = Depends(get_db)) -> AnalyzeResponse:
     clean_str = clean_input(text.input_string)
     words_count = count_words(clean_str)
     sentence_count = count_sentences(clean_str)
     frequent_words = most_frequent_words(clean_str)
     frequent_chars = most_frequent_char(clean_str)
+
+    db_obj = TextAnalysisResult(
+        original_text=text.input_string,
+        clean_text=clean_str,
+        words_count=words_count,
+        sentence_count=sentence_count,
+        frequent_words_json=json.dumps(frequent_words),
+        frequent_chars_json=json.dumps(frequent_chars),
+    )
+
+    db.add(db_obj)
+    db.commit()
+
     return AnalyzeResponse(
         words_count=words_count,
         sentence_count=sentence_count,
         frequent_words=frequent_words,
         frequent_chars=frequent_chars,
-        orginal_text=text.input_string,
+        original_text=text.input_string,
         clean_text=clean_str,
     )
