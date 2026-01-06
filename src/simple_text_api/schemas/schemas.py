@@ -16,5 +16,5 @@ class AnalyzeResponse(BaseModel):
     sentence_count: int
     frequent_words: dict[str, int]
     frequent_chars: dict[str, int]
-    orginal_text: str
+    original_text: str
     clean_text: str
