@@ -1,7 +1,10 @@
 # Text Processing API
 
-A lightweight backend service built with **FastAPI** that provides basic text processing utilities (cleaning and analysis) and stores request history in a database.  
-This project is intentionally small and practical — designed to strengthen Python backend fundamentals (project structure, API design, validation, testing, Docker, and persistence).
+A lightweight backend service built with FastAPI that provides deterministic text-processing utilities and exposes basic observability (metrics & logs).
+The project is intentionally small and practical — designed to strengthen real Python backend fundamentals.
+
+This is not a toy example and not an ML project.
+It focuses on correctness, structure, and production-style tooling.
 
 ---
 
@@ -10,59 +13,47 @@ This project is intentionally small and practical — designed to strengthen Pyt
 - Build a clean, maintainable **Python backend** using FastAPI
 - Practice **API design** (request/response schemas, error handling)
 - Add **persistence** (store analysis results in a database)
-- Write **automated tests** (pytest)
+- Write **automated tests** (pytest - unit + integration)
 - Containerize the service with **Docker**
+- Introduce basic **observability (Prometheus, Loki, Grafana)**
 
----
+# How to Run the Application
 
-## Features
+The recommended way to run this project is using **Docker Compose**.  
+This ensures the API, database, and observability stack run in a consistent environment.
 
-### 1) Health Check
+```bash
+docker compose up --build
+```
 
-- Simple endpoint to verify the service is running.
+## Available Services
 
-### 2) Text Cleaning
+Once running, the following services are available:
 
-- Normalize and clean text using deterministic rules (no ML).
-- Example operations:
-  - lowercasing
-  - trimming whitespace
-  - removing punctuation / special characters
-  - collapsing multiple spaces
+| Service          | URL                          |
+| ---------------- | ---------------------------- |
+| Swagger UI (API) | http://localhost:8000/docs   |
+| Health Check     | http://localhost:8000/health |
+| Prometheus       | http://localhost:9090        |
+| Grafana          | http://localhost:3030        |
 
-### 3) Text Analysis
+### Stopping the Application
 
-- Compute basic statistics from a given text, e.g.:
-  - character count
-  - word count
-  - sentence count (simple heuristic)
-  - most frequent words (optional)
+```bash
+docker compose down
+```
 
-### 4) Persistence (Database)
+or using `-v` to delate data in Docker volumes
 
-- Store each processed request/response so the user can inspect history.
-- Database can be **SQLite** for local development.
+```bash
+docker compose up -v
+```
 
----
-
-## API Endpoints (planned)
+## API Endpoints
 
 ### `GET /health`
 
-Returns service status.
-**Response**
-
-```json
-{ "status": "ok" }
-```
-
-### `POST / clean`
-
-**Request**
-
-```json
-{ "text": "Some TEXT!!!  " }
-```
+- Simple endpoint to verify the service is running.
 
 **Response**
 
@@ -70,28 +61,108 @@ Returns service status.
 { "status": "ok" }
 ```
 
-### 'POST / analyze'
+### `POST /clean_text`
+
+Cleans and normalizes the input text using deterministic rules:
+
+- lowercasing
+- removing configured special characters
+- collapsing multiple whitespace characters
+- trimming leading and trailing spaces
 
 **Request**
 
 ```json
-{ "text": "Hello world. Hello again!" }
+{
+  "input_string": "Some TEXT!!!   "
+}
 ```
 
 **Response**
 
 ```json
 {
-  "text": "Hello world. Hello again!",
-  "char_count": 25,
-  "word_count": 4,
-  "sentence_count": 2,
-  "top_words": [
-    { "word": "hello", "count": 2 },
-    { "word": "world", "count": 1 },
-    { "word": "again", "count": 1 }
-  ]
+  "clean_text": "some text"
 }
 ```
 
-The project uses unit tests for pure text-processing logic and integration tests for FastAPI endpoints with a test SQLite database using dependency overrides.
+Validation rules:
+
+- `input_string` must be non-empty string
+- maximum length: 1000 characters
+
+### `POST /analyze`
+
+Performs text analysis and persists the result in the database.
+
+Processing steps:
+
+1. Clean the input text
+2. Count words
+3. Count sentences (based on . occurrence)
+4. Compute most frequent words
+5. Compute most frequent characters
+6. Save the analysis result to SQLite
+
+**Request**
+
+```json
+{
+  "input_string": "Hello world. Hello again!"
+}
+```
+
+**Response**
+
+```json
+{
+  "words_count": 4,
+  "sentence_count": 1,
+  "frequent_words": {
+    "hello": 2,
+    "world": 1,
+    "again": 1
+  },
+  "frequent_chars": {
+    "h": 2,
+    "e": 2,
+    "l": 5,
+    "o": 3,
+    " ": 3,
+    "w": 1,
+    "r": 1,
+    "d": 1,
+    ".": 1,
+    "a": 2,
+    "g": 1,
+    "i": 1,
+    "n": 1
+  },
+  "original_text": "Hello world. Hello again!",
+  "clean_text": "hello world. hello again"
+}
+```
+
+If a database error occurs, the endpoint returns:
+
+```json
+{
+  "detail": "Database error"
+}
+```
+
+With HTTP status 500
+
+### `GET /metrics`
+
+Prometheus-compatible metrics endpoint.
+
+Used internally by Prometheus to scrape application metrics (request counts, latency, etc.).
+Not intended for direct user interaction.
+
+## Design Decisions & Limitations
+
+- Sentence counting is based on a simple `.` heuristic
+- SQLite is used for simplicity and local development
+- The project is single-node and not designed for horizontal scaling
+- Authentication and authorization are intentionally out of scope
