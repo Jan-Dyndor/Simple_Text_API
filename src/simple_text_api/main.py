@@ -1,6 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+import json
+import time
+from uuid import uuid4
+
+import uvicorn
+from fastapi import Depends, FastAPI, HTTPException, Request
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.orm import Session
-from simple_text_api.db.database import Base, engine
+
+from simple_text_api.db.database import Base, engine, get_db
+from simple_text_api.db.models import TextAnalysisResult
 from simple_text_api.schemas.schemas import AnalyzeResponse, CleanRequest, CleanResponse
 from simple_text_api.services.clean_text import clean_input
 from simple_text_api.services.text_analysis import (
@@ -9,14 +17,7 @@ from simple_text_api.services.text_analysis import (
     most_frequent_char,
     most_frequent_words,
 )
-from simple_text_api.db.database import get_db
-from simple_text_api.db.models import TextAnalysisResult
-import json
 from simple_text_api.utils.logging import logger
-import time
-from uuid import uuid4
-from prometheus_fastapi_instrumentator import Instrumentator
-
 
 Base.metadata.create_all(bind=engine)  # Create table
 app = FastAPI()
@@ -25,26 +26,48 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # if request.url.path == "/metrics":
+    #     return await call_next(request)
+
     id = str(uuid4())
+    req_logger = logger.bind(handler=request.url.path, method=request.method)
     with logger.contextualize(request_id=id):
         start_time = time.perf_counter()
         try:
-            logger.debug(f"{request.method} {request.url.path}")
             response = await call_next(request)
             end_time = time.perf_counter() - start_time
-            logger.debug(
-                f"Completed with status {response.status_code} in {end_time} seconds"
-            )
+            status = response.status_code
+            if status >= 500:
+                req_logger.error(
+                    f"Error {response.status_code} {request.method} {request.url.path} in {end_time} seconds"
+                )
+            elif status >= 400 and status < 500:
+                req_logger.warning(
+                    f"WARNING {response.status_code} {request.method} {request.url.path} in {end_time} seconds"
+                )
+            else:
+                req_logger.info(
+                    f"Completed {request.method} {request.url.path} with status {response.status_code} in {end_time} seconds"
+                )
             return response
         except Exception as e:
             end_time = time.perf_counter() - start_time
-            logger.exception(f"Exception occured {e} and took {end_time}")
+            req_logger.exception(
+                f"Exception occured  {request.method} {request.url.path} -- {e} and took {end_time}"
+            )
             raise
 
 
 @app.get("/health")
 def health_check() -> dict:
     return {"Status": "OK"}
+
+
+@app.get("/error")
+def raise_error():
+    raise HTTPException(
+        status_code=500, detail="Error made on purpose to test Grafana dashboard"
+    )
 
 
 @app.post("/clean_text", response_model=CleanResponse)

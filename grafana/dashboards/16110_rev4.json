@@ -310,7 +310,7 @@
         {
           "datasource": "Prometheus",
           "exemplar": true,
-          "expr": "http_request_duration_seconds_sum{handler=\"/metrics\"}",
+          "expr": "sum(rate(http_request_duration_seconds_sum{handler=\"/metrics\"}[1m]))/sum(rate(http_request_duration_seconds_count{handler=\"/metrics\"}[1m]))",
           "interval": "",
           "legendFormat": "{{method}} {{path}}",
           "refId": "A"
@@ -372,7 +372,7 @@
           "datasource": "Prometheus",
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(http_requests_total{job='fastapi', status=~'5..'})",
+          "expr": "sum(http_requests_total{job='fastapi', status=~'5xx'})",
 
           "instant": true,
           "interval": "",
@@ -560,7 +560,8 @@
         {
           "datasource": "Prometheus",
           "exemplar": true,
-          "expr": "sum by (handler) (http_requests_total{job='fastapi',status='5xx',handler!=\"/metrics\"})/sum by (handler) (http_requests_total{job='fastapi' handler!=\"/metrics\"})",
+          "expr": "sum by (handler) (rate(http_requests_total{job='fastapi', status='5xx', handler!=\"/metrics\"}[5m]))/sum by (handler) (rate(http_requests_total{job='fastapi', handler!='/metrics'}[5m]))",
+          
           "interval": "",
           "legendFormat": "{{path}}",
           "refId": "A"
@@ -967,7 +968,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "sum by (level) (rate({compose_service=\"app\"} |= \"$log_keyword\" [1m]))",
+          "expr": "100 * sum by (level) (count_over_time({app=\"simple_text_api\", handler!=\"/metrics\"}[1m])) / sum(count_over_time({app=\"simple_text_api\", handler!=\"/metrics\"}[1m]))",
           "legendFormat": "{{level}}",
           "refId": "A"
         }
